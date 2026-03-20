@@ -10,7 +10,7 @@
 <script type="module">
   import { initializeApp }                          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getFirestore, doc, setDoc, getDoc }      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
                                                     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
   const firebaseConfig = {
@@ -45,13 +45,20 @@
     return null;
   };
 
-  // Google sign in
+  // Google sign in — redirect method (funciona em Safari/PWA)
   window.fbSignIn = async function() {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch(e) { console.warn('Sign in error:', e); }
   };
+
+  // Handle redirect result on page load
+  getRedirectResult(auth).then((result) => {
+    if (result && result.user) {
+      console.log('Redirect login success:', result.user.displayName);
+    }
+  }).catch((e) => { console.warn('Redirect result error:', e); });
 
   window.fbSignOut = async function() {
     await signOut(auth);
