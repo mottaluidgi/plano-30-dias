@@ -263,6 +263,22 @@
   .muscle:last-child { border: none; }
 
   /* RUN VIEW */
+  /* PESO */
+  .peso-section { margin-bottom: 20px; }
+  .peso-input-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .peso-input { flex:1; font-size: 22px; font-weight: 700; text-align: center; padding: 10px; background: var(--bg2); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); }
+  .peso-save-btn { padding: 10px 20px; border-radius: var(--radius-sm); border: none; background: var(--text); color: #000; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .peso-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .peso-stat { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
+  .peso-stat-val { font-size: 18px; font-weight: 800; color: var(--text); }
+  .peso-stat-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+  .peso-stat-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+  .peso-chart { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 10px; }
+  .peso-log-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+  .peso-log-item:last-child { border-bottom: none; }
+  .peso-log-date { font-size: 12px; color: var(--text2); }
+  .peso-log-val { font-size: 14px; font-weight: 700; color: var(--text); }
+  .peso-log-diff { font-size: 11px; font-weight: 600; }
   .run-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; overflow: hidden; }
   .rc-header { padding: 10px 14px; background: var(--bg3); display: flex; justify-content: space-between; align-items: center; }
   .rc-title { font-size: 13px; font-weight: 600; color: var(--text); }
@@ -553,6 +569,19 @@
     <div id="view-macros" class="view section-pad">
       <h2>Plano alimentar</h2>
       <p class="sub">Macros e refeições diárias</p>
+
+      <!-- PESO -->
+      <div class="peso-section">
+        <div class="horm-section-title" style="margin-bottom:10px;">⚖️ Registro de peso</div>
+        <div class="peso-input-row">
+          <input id="peso-input" class="peso-input" type="number" step="0.1" min="30" max="250" placeholder="00.0">
+          <span style="font-size:16px;color:var(--text2);font-weight:600;">kg</span>
+          <button class="peso-save-btn" onclick="savePeso()">Registrar</button>
+        </div>
+        <div id="peso-stats"></div>
+        <div id="peso-chart-wrap"></div>
+        <div id="peso-log"></div>
+      </div>
       <div class="macro-grid">
         <div class="macro-chip"><div class="mc-label">Carboidrato</div><div class="mc-val">~291g</div></div>
         <div class="macro-chip"><div class="mc-label">Proteína</div><div class="mc-val">~188g</div></div>
@@ -1859,6 +1888,152 @@ function renderSplitCards() {
 
 renderSplitCards();
 rescheduleAllNotifications();
+/* ── PESO ────────────────────────────────────────────────── */
+let pesoLog = []; // [{data:'2026-03-20', peso:98.5, hora:'08:30'}, ...]
+try {
+  const s = JSON.parse(localStorage.getItem('plano30_peso') || 'null');
+  if (s) pesoLog = s;
+} catch(e){}
+
+function savePesoData() {
+  try { localStorage.setItem('plano30_peso', JSON.stringify(pesoLog)); } catch(e){}
+  if (window.fbSave) window.fbSave('peso', pesoLog);
+}
+
+function savePeso() {
+  const val = parseFloat(document.getElementById('peso-input').value);
+  if (!val || val < 30 || val > 250) return;
+  const hoje = getTodayKey();
+  const hora = getNowLabel();
+  // Update if already registered today, else add new
+  const idx = pesoLog.findIndex(p => p.data === hoje);
+  if (idx >= 0) pesoLog[idx] = {data: hoje, peso: val, hora};
+  else pesoLog.unshift({data: hoje, peso: val, hora});
+  pesoLog.sort((a,b) => b.data.localeCompare(a.data));
+  savePesoData();
+  document.getElementById('peso-input').value = '';
+  renderPeso();
+}
+
+function deletePeso(data) {
+  pesoLog = pesoLog.filter(p => p.data !== data);
+  savePesoData();
+  renderPeso();
+}
+
+function renderPeso() {
+  const statsEl = document.getElementById('peso-stats');
+  const chartEl = document.getElementById('peso-chart-wrap');
+  const logEl   = document.getElementById('peso-log');
+  if (!statsEl) return;
+
+  if (pesoLog.length === 0) {
+    statsEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3);font-size:13px;">Nenhum registro ainda — adicione seu peso acima</div>';
+    chartEl.innerHTML = '';
+    logEl.innerHTML   = '';
+    return;
+  }
+
+  const atual   = pesoLog[0].peso;
+  const inicial = pesoLog[pesoLog.length-1].peso;
+  const diff    = atual - inicial;
+  const min     = Math.min(...pesoLog.map(p=>p.peso));
+  const max     = Math.max(...pesoLog.map(p=>p.peso));
+  const diffColor = diff < 0 ? '#27ae60' : diff > 0 ? '#e94560' : 'var(--text2)';
+  const diffSign  = diff > 0 ? '+' : '';
+
+  // Stats
+  statsEl.innerHTML =
+    '<div class="peso-stats">' +
+      '<div class="peso-stat">' +
+        '<div class="peso-stat-val">' + atual.toFixed(1) + '</div>' +
+        '<div class="peso-stat-label">Atual (kg)</div>' +
+        '<div class="peso-stat-sub">' + pesoLog[0].data.split('-').reverse().join('/') + '</div>' +
+      '</div>' +
+      '<div class="peso-stat">' +
+        '<div class="peso-stat-val" style="color:' + diffColor + ';">' + diffSign + diff.toFixed(1) + '</div>' +
+        '<div class="peso-stat-label">Variação</div>' +
+        '<div class="peso-stat-sub">desde o início</div>' +
+      '</div>' +
+      '<div class="peso-stat">' +
+        '<div class="peso-stat-val">' + pesoLog.length + '</div>' +
+        '<div class="peso-stat-label">Registros</div>' +
+        '<div class="peso-stat-sub">min ' + min.toFixed(1) + ' · max ' + max.toFixed(1) + '</div>' +
+      '</div>' +
+    '</div>';
+
+  // Mini chart SVG
+  if (pesoLog.length >= 2) {
+    const sorted = pesoLog.slice().reverse(); // oldest first
+    const W = 320, H = 70, PAD = 8;
+    const pesos = sorted.map(p=>p.peso);
+    const minP = Math.min(...pesos) - 1;
+    const maxP = Math.max(...pesos) + 1;
+    const xStep = (W - PAD*2) / (pesos.length - 1);
+    const yScale = (H - PAD*2) / (maxP - minP);
+
+    const points = pesos.map((p,i) => {
+      const x = PAD + i * xStep;
+      const y = H - PAD - (p - minP) * yScale;
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+
+    // Area fill
+    const firstX = PAD, lastX = PAD + (pesos.length-1)*xStep;
+    const areaPoints = 'M' + firstX + ',' + H +
+      ' L' + points.split(' ').map((p,i)=>(i===0?'':' ')+p).join('') +
+      ' L' + lastX.toFixed(1) + ',' + H + ' Z';
+
+    chartEl.innerHTML =
+      '<div class="peso-chart">' +
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Evolução do peso</div>' +
+        '<svg width="100%" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+          '<defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">' +
+            '<stop offset="0%" stop-color="' + diffColor + '" stop-opacity="0.3"/>' +
+            '<stop offset="100%" stop-color="' + diffColor + '" stop-opacity="0"/>' +
+          '</linearGradient></defs>' +
+          '<path d="' + areaPoints + '" fill="url(#pg)"/>' +
+          '<polyline points="' + points + '" fill="none" stroke="' + diffColor + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+          // Dots
+          pesos.map((p,i) => {
+            const x = PAD + i * xStep;
+            const y = H - PAD - (p - minP) * yScale;
+            return '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3" fill="' + diffColor + '"/>';
+          }).join('') +
+        '</svg>' +
+      '</div>';
+  } else {
+    chartEl.innerHTML = '';
+  }
+
+  // Log list (last 15)
+  const recent = pesoLog.slice(0, 15);
+  var logHtml = '<div class="horm-section-title" style="margin-bottom:6px;">Histórico</div>';
+  recent.forEach(function(p, i) {
+    const prev = pesoLog[i+1];
+    const d = prev ? p.peso - prev.peso : null;
+    const dStr = d !== null ? (d > 0 ? '+' : '') + d.toFixed(1) + ' kg' : '—';
+    const dColor = d === null ? 'var(--text3)' : d < 0 ? '#27ae60' : d > 0 ? '#e94560' : 'var(--text3)';
+    const parts = p.data.split('-');
+    const dateLabel = parts[2] + '/' + parts[1] + '/' + parts[0].slice(2);
+    logHtml +=
+      '<div class="peso-log-item">' +
+        '<div>' +
+          '<div class="peso-log-date">' + dateLabel + (p.hora?' · '+p.hora:'') + '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<span class="peso-log-diff" style="color:' + dColor + ';">' + dStr + '</span>' +
+          '<span class="peso-log-val">' + p.peso.toFixed(1) + ' kg</span>' +
+          '<span style="color:var(--text3);font-size:13px;cursor:pointer;" onclick="deletePeso(\'' + p.data + '\')">✕</span>' +
+        '</div>' +
+      '</div>';
+  });
+  logEl.innerHTML = logHtml;
+}
+
+renderPeso();
+
+
 
 
 /* ── RELÓGIO BRASÍLIA ───────────────────────────────────── */
@@ -2687,6 +2862,7 @@ async function uploadLocalToFirebase() {
     estudo:  () => ({done:estudoDone, sessoes, nextId:sessaoNextId}),
     leiseca: () => leisecaDone,
     splits:  () => splitCounts,
+    peso:    () => pesoLog,
   };
   const uploads = Object.entries(localMap).map(([k, getData]) => {
     const data = getData();
@@ -2701,9 +2877,9 @@ async function uploadLocalToFirebase() {
 window.addEventListener('firebase-ready', async () => {
   showSync('☁ Sincronizando...');
 
-  const keys = ['done','tasks','horm','fin','daily','estudo','leiseca','splits'];
+  const keys = ['done','tasks','horm','fin','daily','estudo','leiseca','splits','peso'];
   const loaders = await Promise.all(keys.map(k => window.fbLoad(k)));
-  const [fbDone, fbTasks, fbHorm, fbFin, fbDaily, fbEstudo, fbLeiseca, fbSplits] = loaders;
+  const [fbDone, fbTasks, fbHorm, fbFin, fbDaily, fbEstudo, fbLeiseca, fbSplits, fbPeso] = loaders;
 
   // Decide: Firebase tem dados? Usa Firebase. Senão, sobe o localStorage.
   const firebaseHasData = fbDone || fbTasks || fbHorm || fbFin || fbDaily || fbEstudo || fbLeiseca || fbSplits;
