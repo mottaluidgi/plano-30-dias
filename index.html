@@ -2936,10 +2936,27 @@ window.addEventListener('firebase-ready', async () => {
     try { localStorage.setItem('plano30_splits', JSON.stringify(splitCounts)); } catch(e){}
     renderSplitCards();
   }
+  if (fbPeso) {
+    pesoLog = fbPeso;
+    try { localStorage.setItem('plano30_peso', JSON.stringify(pesoLog)); } catch(e){}
+    renderPeso();
+  }
 
+  // Re-render TUDO com os dados do Firebase
   renderNav();
   renderDay();
   renderUserBadge();
+  renderFin();
+  renderDailyFin();
+  renderEdital();
+  renderLeiseca();
+  renderProgresso();
+  renderSessoes();
+  renderSplitCards();
+  renderPeso();
+  if (currentHormMonth) {
+    renderHorm();
+  }
   showSync('✓ Sincronizado');
 });
 </script>
