@@ -257,6 +257,22 @@
   .peso-log-date { font-size: 12px; color: var(--text2); }
   .peso-log-val { font-size: 14px; font-weight: 700; color: var(--text); }
   .peso-log-diff { font-size: 11px; font-weight: 600; }
+  /* ÁGUA */
+  .agua-section { margin-bottom: 20px; }
+  .agua-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .agua-ml { font-size: 28px; font-weight: 800; color: #2980b9; line-height: 1; }
+  .agua-target { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .agua-bar-wrap { height: 8px; background: var(--bg3); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .agua-bar-fill { height: 100%; background: linear-gradient(90deg, #2980b9, #5dade2); border-radius: 10px; transition: width 0.4s ease; }
+  .agua-cups { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .agua-cup { width: 38px; height: 44px; border-radius: 4px 4px 8px 8px; border: 1.5px solid rgba(41,128,185,0.35); background: transparent; cursor: pointer; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; transition: all 0.15s; position: relative; overflow: hidden; }
+  .agua-cup.filled { border-color: #2980b9; }
+  .agua-cup.filled::before { content: ''; position: absolute; bottom: 0; left: 0; right: 0; background: rgba(41,128,185,0.25); height: 100%; }
+  .agua-cup-wave { font-size: 14px; position: relative; z-index: 1; }
+  .agua-btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .agua-btn { flex: 1; padding: 8px; border-radius: var(--radius-sm); border: 0.5px solid rgba(41,128,185,0.3); background: rgba(41,128,185,0.08); color: #5dade2; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.15s; }
+  .agua-btn:active { background: rgba(41,128,185,0.2); }
+  .agua-reset { width: 100%; padding: 7px; border-radius: var(--radius-sm); border: 0.5px solid var(--border); background: transparent; color: var(--text3); font-size: 11px; cursor: pointer; }
   .run-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; overflow: hidden; }
   .rc-header { padding: 10px 14px; background: var(--bg3); display: flex; justify-content: space-between; align-items: center; }
   .rc-title { font-size: 13px; font-weight: 600; color: var(--text); }
@@ -547,6 +563,30 @@
     <div id="view-macros" class="view section-pad">
       <h2>Plano alimentar</h2>
       <p class="sub">Macros e refeições diárias</p>
+
+      <!-- ÁGUA -->
+      <div class="agua-section">
+        <div class="horm-section-title" style="margin-bottom:10px;">💧 Consumo de água</div>
+        <div class="agua-meta">
+          <div>
+            <div class="agua-ml" id="agua-ml">0 ml</div>
+            <div class="agua-target" id="agua-target">Meta: 4.000 ml · 0%</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px;color:var(--text3);">Meta diária</div>
+            <div style="font-size:16px;font-weight:700;color:var(--text2);">4.000 ml</div>
+          </div>
+        </div>
+        <div class="agua-bar-wrap"><div class="agua-bar-fill" id="agua-bar" style="width:0%;"></div></div>
+        <div class="agua-cups" id="agua-cups"></div>
+        <div class="agua-btn-row">
+          <button class="agua-btn" onclick="addAgua(200)">+ 200ml</button>
+          <button class="agua-btn" onclick="addAgua(300)">+ 300ml</button>
+          <button class="agua-btn" onclick="addAgua(500)">+ 500ml</button>
+          <button class="agua-btn" onclick="addAgua(750)">+ 750ml</button>
+        </div>
+        <button class="agua-reset" onclick="resetAgua()">↺ Zerar contador de hoje</button>
+      </div>
 
       <!-- PESO -->
       <div class="peso-section">
@@ -1866,6 +1906,91 @@ function renderSplitCards() {
 
 renderSplitCards();
 rescheduleAllNotifications();
+
+/* ── ÁGUA ───────────────────────────────────────────────── */
+const AGUA_META = 4000; // ml
+const AGUA_COPO = 250;  // ml por copinho visual
+
+let aguaData = {}; // { 'YYYY-MM-DD': 2500 }
+try {
+  const s = JSON.parse(localStorage.getItem('plano30_agua') || 'null');
+  if (s) aguaData = s;
+} catch(e){}
+
+function saveAgua() {
+  try { localStorage.setItem('plano30_agua', JSON.stringify(aguaData)); } catch(e){}
+  if (window.fbSave) window.fbSave('agua', aguaData);
+}
+
+function getAguaHoje() {
+  return aguaData[getTodayKey()] || 0;
+}
+
+function addAgua(ml) {
+  const key = getTodayKey();
+  aguaData[key] = (aguaData[key] || 0) + ml;
+  saveAgua();
+  renderAgua();
+}
+
+function resetAgua() {
+  const key = getTodayKey();
+  aguaData[key] = 0;
+  saveAgua();
+  renderAgua();
+}
+
+function renderAgua() {
+  const total = getAguaHoje();
+  const pct   = Math.min(100, Math.round(total / AGUA_META * 100));
+  const copos = Math.ceil(AGUA_META / AGUA_COPO); // 16 copos
+
+  const mlEl     = document.getElementById('agua-ml');
+  const targetEl = document.getElementById('agua-target');
+  const barEl    = document.getElementById('agua-bar');
+  const cupsEl   = document.getElementById('agua-cups');
+  if (!mlEl) return;
+
+  // Format ml
+  const label = total >= 1000 ? (total/1000).toFixed(1).replace('.0','') + ' L' : total + ' ml';
+  mlEl.textContent = label;
+  mlEl.style.color = pct >= 100 ? '#27ae60' : '#2980b9';
+
+  targetEl.textContent = 'Meta: 4.000 ml · ' + pct + '%' + (pct >= 100 ? ' ✓' : '');
+  barEl.style.width = pct + '%';
+  barEl.style.background = pct >= 100
+    ? 'linear-gradient(90deg, #27ae60, #4cd98a)'
+    : 'linear-gradient(90deg, #2980b9, #5dade2)';
+
+  // Cups visual — each cup = 250ml
+  const filledCups = Math.floor(total / AGUA_COPO);
+  let html = '';
+  for (let i = 0; i < copos; i++) {
+    const filled = i < filledCups;
+    html += '<div class="agua-cup' + (filled ? ' filled' : '') + '" onclick="toggleAguaCup(' + i + ')" title="' + ((i+1)*AGUA_COPO) + 'ml">' +
+      '<span class="agua-cup-wave">' + (filled ? '💧' : '○') + '</span>' +
+      '</div>';
+  }
+  cupsEl.innerHTML = html;
+}
+
+function toggleAguaCup(idx) {
+  const key = getTodayKey();
+  const current = aguaData[key] || 0;
+  const filledCups = Math.floor(current / AGUA_COPO);
+  if (idx < filledCups) {
+    // Remove water up to this cup
+    aguaData[key] = idx * AGUA_COPO;
+  } else {
+    // Add water to fill up to this cup
+    aguaData[key] = (idx + 1) * AGUA_COPO;
+  }
+  saveAgua();
+  renderAgua();
+}
+
+renderAgua();
+
 /* ── PESO ────────────────────────────────────────────────── */
 let pesoLog = []; // [{data:'2026-03-20', peso:98.5, hora:'08:30'}, ...]
 try {
@@ -2841,6 +2966,7 @@ async function uploadLocalToFirebase() {
     leiseca: () => leisecaDone,
     splits:  () => splitCounts,
     peso:    () => pesoLog,
+    agua:    () => aguaData,
   };
   const uploads = Object.entries(localMap).map(([k, getData]) => {
     const data = getData();
@@ -2855,9 +2981,9 @@ async function uploadLocalToFirebase() {
 window.addEventListener('firebase-ready', async () => {
   showSync('☁ Sincronizando...');
 
-  const keys = ['done','tasks','horm','fin','daily','estudo','leiseca','splits','peso'];
+  const keys = ['done','tasks','horm','fin','daily','estudo','leiseca','splits','peso','agua'];
   const loaders = await Promise.all(keys.map(k => window.fbLoad(k)));
-  const [fbDone, fbTasks, fbHorm, fbFin, fbDaily, fbEstudo, fbLeiseca, fbSplits, fbPeso] = loaders;
+  const [fbDone, fbTasks, fbHorm, fbFin, fbDaily, fbEstudo, fbLeiseca, fbSplits, fbPeso, fbAgua] = loaders;
 
   // Debug
   console.log('[OBSTINATE] Firebase carregou:', {done:!!fbDone,tasks:!!fbTasks,horm:!!fbHorm,fin:!!fbFin,daily:!!fbDaily,estudo:!!fbEstudo,leiseca:!!fbLeiseca,splits:!!fbSplits,peso:!!fbPeso});
@@ -2925,6 +3051,12 @@ window.addEventListener('firebase-ready', async () => {
     renderPeso();
   }
 
+  if (fbAgua) {
+    aguaData = fbAgua;
+    try { localStorage.setItem('plano30_agua', JSON.stringify(aguaData)); } catch(e){}
+    renderAgua();
+  }
+
   // Re-render TUDO com os dados do Firebase
   renderNav();
   renderDay();
@@ -2937,6 +3069,7 @@ window.addEventListener('firebase-ready', async () => {
   renderSessoes();
   renderSplitCards();
   renderPeso();
+  renderAgua();
   if (currentHormMonth) {
     renderHorm();
   }
