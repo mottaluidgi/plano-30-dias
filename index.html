@@ -147,6 +147,33 @@
   .view.active { display: block; }
 
   /* WEEK NAV */
+  /* DASHBOARD */
+  .dash-wrap { padding: 12px 14px 0; }
+  .dash-hero { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 14px; }
+  .dash-ring { position: relative; flex-shrink: 0; }
+  .dash-ring svg { transform: rotate(-90deg); }
+  .dash-ring-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+  .dash-ring-num { font-size: 18px; font-weight: 800; color: var(--text); line-height: 1; }
+  .dash-ring-lbl { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; }
+  .dash-hero-info { flex: 1; }
+  .dash-greeting { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .dash-date { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
+  .dash-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+  .dash-pill { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 20px; }
+  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .dash-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 11px 12px; }
+  .dash-card-icon { font-size: 16px; margin-bottom: 4px; }
+  .dash-card-val { font-size: 20px; font-weight: 800; color: var(--text); line-height: 1; }
+  .dash-card-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+  .dash-card-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+  .dash-card.done { border-color: rgba(39,174,96,0.3); background: rgba(39,174,96,0.06); }
+  .dash-card.warn { border-color: rgba(233,69,96,0.3); background: rgba(233,69,96,0.06); }
+  .dash-card.info { border-color: rgba(41,128,185,0.3); background: rgba(41,128,185,0.06); }
+  .dash-section-title { font-size: 10px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin: 12px 0 6px; }
+  .dash-habit { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 5px; }
+  .dash-habit-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dash-habit-name { flex: 1; font-size: 13px; color: var(--text); }
+  .dash-habit-status { font-size: 11px; font-weight: 600; }
   .week-nav { display: flex; gap: 6px; padding: 14px 16px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
   .week-nav::-webkit-scrollbar { display: none; }
   .day-btn { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 10px; border-radius: var(--radius-sm); border: 0.5px solid var(--border); background: var(--bg2); cursor: pointer; min-width: 52px; transition: all 0.15s; }
@@ -543,6 +570,7 @@
     <div class="header-row">
       <h1>OBSTINATE</h1>
       <div style="display:flex;align-items:center;gap:8px;">
+        <button id="dash-toggle-btn" onclick="toggleDashboard()" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;border:0.5px solid var(--border2);background:var(--bg2);color:var(--text2);cursor:pointer;">📊 Resumo</button>
         <span class="overall-badge" id="overall-badge">0% feito</span>
         <div id="user-badge-wrap"></div>
       </div>
@@ -555,8 +583,13 @@
 
     <!-- CHECKLIST VIEW -->
     <div id="view-checklist" class="view active">
-      <div class="week-nav" id="week-nav"></div>
-      <div class="day-content" id="day-content"></div>
+      <div id="dash-wrap" class="dash-wrap" style="display:none;">
+        <div id="dash-content"></div>
+      </div>
+      <div id="checklist-wrap">
+        <div class="week-nav" id="week-nav"></div>
+        <div class="day-content" id="day-content"></div>
+      </div>
     </div>
 
     <!-- MACROS VIEW -->
@@ -1906,6 +1939,167 @@ function renderSplitCards() {
 
 renderSplitCards();
 rescheduleAllNotifications();
+
+
+/* ── DASHBOARD ──────────────────────────────────────────── */
+let dashVisible = false;
+
+function toggleDashboard() {
+  dashVisible = !dashVisible;
+  const dashWrap = document.getElementById('dash-wrap');
+  const checkWrap = document.getElementById('checklist-wrap');
+  const btn = document.getElementById('dash-toggle-btn');
+  if (dashVisible) {
+    dashWrap.style.display = 'block';
+    checkWrap.style.display = 'none';
+    btn.style.background = 'var(--text)';
+    btn.style.color = '#000';
+    btn.style.borderColor = 'var(--text)';
+    renderDashboard();
+  } else {
+    dashWrap.style.display = 'none';
+    checkWrap.style.display = 'block';
+    btn.style.background = 'var(--bg2)';
+    btn.style.color = 'var(--text2)';
+    btn.style.borderColor = 'var(--border2)';
+  }
+}
+
+function renderDashboard() {
+  const el = document.getElementById('dash-content');
+  if (!el) return;
+
+  const hoje = getTodayKey();
+  const todayIdx = getTodayIndex();
+  const d = DAYS[todayIdx];
+
+  // Checklist
+  const checkTotal = d.items.length;
+  const checkDone  = d.items.filter((_,ii) => done[key(todayIdx,ii)]).length;
+  const checkPct   = Math.round(checkDone / checkTotal * 100);
+
+  // Água
+  const aguaHoje = aguaData[hoje] || 0;
+  const aguaPct  = Math.min(100, Math.round(aguaHoje / AGUA_META * 100));
+  const aguaLabel = aguaHoje >= 1000 ? (aguaHoje/1000).toFixed(1).replace('.0','') + 'L' : aguaHoje + 'ml';
+
+  // Peso
+  const pesoHoje = pesoLog.find(p => p.data === hoje);
+  const pesoLabel = pesoHoje ? pesoHoje.peso.toFixed(1) + ' kg' : '—';
+
+  // Estudo
+  const studyMin = sessoes.filter(s => s.data === hoje).reduce((a,s) => a+s.minutos, 0);
+  const studyH   = Math.floor(studyMin/60);
+  const studyM   = studyMin % 60;
+  const studyLabel = studyMin > 0 ? (studyH > 0 ? studyH + 'h' : '') + (studyM > 0 ? studyM + 'min' : '') : '0min';
+  const studyPct = Math.min(100, Math.round(studyMin / 120 * 100));
+
+  // Treino (gym hoje?)
+  const gymDone = d.items.some((item, ii) => item.type === 'gym' && done[key(todayIdx, ii)]);
+  const gymItem = d.items.find(item => item.type === 'gym');
+  const gymLabel = gymItem ? gymItem.text.split('—')[0].trim() : 'Treino';
+  const hasGym   = !!gymItem;
+
+  // BJJ
+  const bjjDone = d.items.some((item, ii) => item.type === 'bjj' && done[key(todayIdx, ii)]);
+  const hasBjj  = d.items.some(item => item.type === 'bjj');
+
+  // Corrida
+  const runDone = d.items.some((item, ii) => item.type === 'run' && done[key(todayIdx, ii)]);
+  const hasRun  = d.items.some(item => item.type === 'run');
+
+  // Hormonal
+  const hormDone = d.items.some((item, ii) => item.type === 'horm' && done[key(todayIdx, ii)]);
+  const hasHorm  = d.items.some(item => item.type === 'horm');
+
+  // GH+Insulina
+  const ghDone = d.items.some((item, ii) => item.type === 'gh' && done[key(todayIdx, ii)]);
+
+  // Greeting
+  const hora = getBrasiliaDate().getHours();
+  const greeting = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+  const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const now = getBrasiliaDate();
+  const dateStr = dias[now.getDay()] + ', ' + now.getDate() + ' ' + meses[now.getMonth()];
+
+  // Ring SVG
+  const r = 36, circ = 2 * Math.PI * r;
+  const dash = circ * (1 - checkPct/100);
+  const ringColor = checkPct >= 100 ? '#27ae60' : checkPct >= 60 ? '#e67e22' : '#e94560';
+
+  // Pills
+  var pills = '';
+  if (hasHorm) pills += '<span class="dash-pill" style="background:rgba(142,68,173,0.18);color:#c39bd3;">' + (hormDone ? '✓' : '○') + ' Hormonal</span>';
+  if (hasRun)  pills += '<span class="dash-pill" style="background:rgba(39,174,96,0.15);color:#4cd98a;">' + (runDone ? '✓' : '○') + ' Corrida</span>';
+  if (hasBjj)  pills += '<span class="dash-pill" style="background:rgba(142,68,173,0.18);color:#c39bd3;">' + (bjjDone ? '✓' : '○') + ' BJJ</span>';
+  pills += '<span class="dash-pill" style="background:rgba(233,69,96,0.15);color:#f08090;">' + (ghDone ? '✓' : '○') + ' GH+Ins</span>';
+
+  // Cards
+  function card(cls, icon, val, label, sub) {
+    return '<div class="dash-card ' + cls + '">' +
+      '<div class="dash-card-icon">' + icon + '</div>' +
+      '<div class="dash-card-val">' + val + '</div>' +
+      '<div class="dash-card-label">' + label + '</div>' +
+      (sub ? '<div class="dash-card-sub">' + sub + '</div>' : '') +
+      '</div>';
+  }
+
+  var aguaCls = aguaPct >= 100 ? 'done' : aguaPct >= 50 ? '' : 'warn';
+  var studyCls = studyPct >= 100 ? 'done' : studyPct >= 50 ? '' : '';
+  var pesoCls = pesoHoje ? 'info' : '';
+
+  // Habits
+  function habit(color, name, done_, notApplicable) {
+    if (notApplicable) return '';
+    var statusColor = done_ ? '#27ae60' : '#e94560';
+    var statusLabel = done_ ? '✓ feito' : '○ pendente';
+    return '<div class="dash-habit">' +
+      '<div class="dash-habit-dot" style="background:' + color + ';"></div>' +
+      '<span class="dash-habit-name">' + name + '</span>' +
+      '<span class="dash-habit-status" style="color:' + statusColor + ';">' + statusLabel + '</span>' +
+      '</div>';
+  }
+
+  el.innerHTML =
+    '<div class="dash-hero">' +
+      '<div class="dash-ring">' +
+        '<svg width="88" height="88" viewBox="0 0 88 88">' +
+          '<circle cx="44" cy="44" r="' + r + '" fill="none" stroke="var(--bg3)" stroke-width="7"/>' +
+          '<circle cx="44" cy="44" r="' + r + '" fill="none" stroke="' + ringColor + '" stroke-width="7" stroke-linecap="round"' +
+            ' stroke-dasharray="' + circ.toFixed(1) + '" stroke-dashoffset="' + dash.toFixed(1) + '"/>' +
+        '</svg>' +
+        '<div class="dash-ring-pct">' +
+          '<span class="dash-ring-num" style="color:' + ringColor + ';">' + checkPct + '%</span>' +
+          '<span class="dash-ring-lbl">hoje</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="dash-hero-info">' +
+        '<div class="dash-greeting">' + greeting + ', Luidgi</div>' +
+        '<div class="dash-date">' + dateStr + ' · ' + checkDone + '/' + checkTotal + ' itens</div>' +
+        '<div class="dash-pills">' + pills + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="dash-grid">' +
+      card(aguaCls, '💧', aguaLabel, 'Água hoje', aguaPct + '% da meta') +
+      card(studyCls, '📚', studyLabel, 'Estudo hoje', 'meta: 120min · ' + studyPct + '%') +
+      card(pesoCls, '⚖️', pesoLabel, 'Peso hoje', pesoHoje ? '' : 'não registrado') +
+      (hasGym ? card(gymDone ? 'done' : 'warn', '🏋️', gymDone ? 'Feito' : 'Pendente', gymLabel, '') : '') +
+    '</div>' +
+
+    '<div class="dash-section-title">Hábitos do dia</div>' +
+    habit('#e94560', 'Alimentação (Ref 1–4)', d.items.some((item,ii)=>item.type==='ref'&&done[key(todayIdx,ii)]), false) +
+    habit('#2980b9', 'Estudo', studyMin > 0, false) +
+    habit('#27ae60', 'Hidratação (4L)', aguaHoje >= 4000, false) +
+    (hasGym ? habit('#4cd98a', 'Treino musculação', gymDone, false) : '') +
+    (hasBjj ? habit('#c39bd3', 'BJJ', bjjDone, false) : '') +
+    (hasRun  ? habit('#f08090', 'Corrida', runDone, false) : '') +
+    (hasHorm ? habit('#8e44ad', 'Aplicação hormonal', hormDone, false) : '') +
+    habit('#e67e22', 'GH + Insulina', ghDone, false) +
+
+    '<div style="height:16px;"></div>';
+}
 
 /* ── ÁGUA ───────────────────────────────────────────────── */
 const AGUA_META = 4000; // ml
