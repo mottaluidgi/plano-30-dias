@@ -855,22 +855,6 @@
             <input id="es-topico" class="ci-input" type="text" placeholder="Tópico estudado" style="width:100%;text-align:left;font-size:13px;">
             <input id="es-minutos" class="ci-input" type="number" placeholder="Minutos" min="1" max="480" style="width:100%;">
           </div>
-          <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Questões (opcional)</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
-            <div>
-              <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Total</div>
-              <input id="es-q-total" class="ci-input" type="number" placeholder="0" min="0" style="width:100%;" oninput="calcAcertos()">
-            </div>
-            <div>
-              <div style="font-size:10px;color:#27ae60;margin-bottom:3px;">Acertos</div>
-              <input id="es-q-acertos" class="ci-input" type="number" placeholder="0" min="0" style="width:100%;border-color:rgba(39,174,96,0.4);" oninput="calcAcertos()">
-            </div>
-            <div>
-              <div style="font-size:10px;color:#e94560;margin-bottom:3px;">Erros</div>
-              <input id="es-q-erros" class="ci-input" type="number" placeholder="0" min="0" style="width:100%;border-color:rgba(233,69,96,0.3);" oninput="calcErros()">
-            </div>
-          </div>
-          <div id="es-aproveitamento" style="text-align:center;font-size:12px;color:var(--text2);margin-bottom:8px;min-height:16px;"></div>
           <button onclick="addSessao()" style="width:100%;padding:10px;border-radius:var(--radius-sm);border:none;background:var(--text);color:#000;font-size:13px;font-weight:600;cursor:pointer;">+ Registrar sessão</button>
         </div>
         <div id="est-sessoes-list"></div>
@@ -2814,45 +2798,24 @@ function renderProgresso() {
       </div>
     </div>
 
-    <div class="horm-section-title">Por matéria — tópicos + questões</div>
-    ${matStats.map(({mat,done,total,mins,pct}) => {
-      const matSessoes = sessoes.filter(s=>s.materia===mat.id && s.questoes);
-      const qTotal   = matSessoes.reduce((a,s)=>a+s.questoes.total,0);
-      const qAcertos = matSessoes.reduce((a,s)=>a+s.questoes.acertos,0);
-      const qAprov   = qTotal>0 ? Math.round(qAcertos/qTotal*100) : null;
-      const aprovColor = qAprov===null?'var(--text3)':qAprov>=70?'#27ae60':qAprov>=50?'#e67e22':'#e94560';
-      return `<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+    <div class="horm-section-title">Por matéria</div>
+    ${matStats.map(({mat,done,total,mins,pct}) => `
+      <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <div style="display:flex;align-items:center;gap:6px;">
             <div style="width:8px;height:8px;border-radius:50%;background:${mat.color};flex-shrink:0;"></div>
             <span style="font-size:13px;font-weight:600;color:var(--text);">${mat.label}</span>
           </div>
-          <span style="font-size:11px;color:var(--text2);">${Math.floor(mins/60)}h${mins%60>0?String(mins%60).padStart(2,'0')+'m':''}</span>
+          <span style="font-size:12px;font-weight:700;color:var(--text);">${mins>=60?Math.floor(mins/60)+"h"+(mins%60>0?String(mins%60).padStart(2,"0")+"m":""):(mins>0?mins+"min":"—")}</span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;">
-          <div style="text-align:center;background:var(--bg);border-radius:6px;padding:5px 4px;">
-            <div style="font-size:15px;font-weight:800;color:var(--text);">${done}/${total}</div>
-            <div style="font-size:9px;color:var(--text3);text-transform:uppercase;">tópicos</div>
-          </div>
-          <div style="text-align:center;background:var(--bg);border-radius:6px;padding:5px 4px;">
-            <div style="font-size:15px;font-weight:800;color:var(--text);">${qTotal||'—'}</div>
-            <div style="font-size:9px;color:var(--text3);text-transform:uppercase;">questões</div>
-          </div>
-          <div style="text-align:center;background:var(--bg);border-radius:6px;padding:5px 4px;">
-            <div style="font-size:15px;font-weight:800;color:#27ae60;">${qAcertos||'—'}</div>
-            <div style="font-size:9px;color:var(--text3);text-transform:uppercase;">acertos</div>
-          </div>
-          <div style="text-align:center;background:var(--bg);border-radius:6px;padding:5px 4px;">
-            <div style="font-size:15px;font-weight:800;color:${aprovColor};">${qAprov!==null?qAprov+'%':'—'}</div>
-            <div style="font-size:9px;color:var(--text3);text-transform:uppercase;">aproveit.</div>
-          </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:6px;">
+          <span>${done}/${total} tópicos</span><span>${pct}% concluído</span>
         </div>
         <div style="height:5px;background:var(--bg3);border-radius:10px;overflow:hidden;">
           <div style="height:100%;width:${pct}%;background:${mat.color};border-radius:10px;transition:width 0.3s;"></div>
         </div>
-        ${qAprov!==null?`<div style="font-size:10px;margin-top:4px;color:${aprovColor};">${qAprov>=70?'✓ Bom aproveitamento':qAprov>=50?'⚠ Pode melhorar':'✗ Precisa revisar'} · ${qAcertos}/${qTotal} acertos</div>`:''}
-      </div>`;
-    }).join('')}`;
+      </div>`
+    ).join("")}`;
 
   // Build chart separately (avoids nested template literal issues)
   buildStudyChart(matStats);
@@ -2894,53 +2857,15 @@ function buildStudyChart(matStats) {
     '</svg>';
 }
 
-function calcAcertos() {
-  const total   = parseInt(document.getElementById('es-q-total').value) || 0;
-  const acertos = parseInt(document.getElementById('es-q-acertos').value) || 0;
-  const erros   = total - acertos;
-  if (erros >= 0 && document.getElementById('es-q-erros')) {
-    document.getElementById('es-q-erros').value = erros > 0 ? erros : '';
-  }
-  updateAproveitamento();
-}
-
-function calcErros() {
-  const total = parseInt(document.getElementById('es-q-total').value) || 0;
-  const erros = parseInt(document.getElementById('es-q-erros').value) || 0;
-  const acertos = total - erros;
-  if (acertos >= 0 && document.getElementById('es-q-acertos')) {
-    document.getElementById('es-q-acertos').value = acertos > 0 ? acertos : '';
-  }
-  updateAproveitamento();
-}
-
-function updateAproveitamento() {
-  const total   = parseInt(document.getElementById('es-q-total').value) || 0;
-  const acertos = parseInt(document.getElementById('es-q-acertos').value) || 0;
-  const el = document.getElementById('es-aproveitamento');
-  if (!el || !total) { if(el) el.innerHTML=''; return; }
-  const pct = Math.round(acertos / total * 100);
-  const color = pct >= 70 ? '#27ae60' : pct >= 50 ? '#e67e22' : '#e94560';
-  el.innerHTML = `Aproveitamento: <strong style="color:${color};">${pct}%</strong> (${acertos} de ${total})`;
-}
-
 function addSessao() {
-  const materia  = document.getElementById('es-materia').value;
-  const bloco    = document.getElementById('es-bloco').value;
-  const topico   = document.getElementById('es-topico').value.trim();
-  const minutos  = parseInt(document.getElementById('es-minutos').value) || 60;
-  const qTotal   = parseInt(document.getElementById('es-q-total').value) || 0;
-  const qAcertos = parseInt(document.getElementById('es-q-acertos').value) || 0;
-  const qErros   = parseInt(document.getElementById('es-q-erros').value) || 0;
-  const questoes = qTotal > 0 ? {total: qTotal, acertos: qAcertos, erros: qErros} : null;
-  sessoes.unshift({id:sessaoNextId++, materia, bloco, topico, minutos, questoes, data:getTodayKey(), hora:getNowLabel()});
+  const materia = document.getElementById('es-materia').value;
+  const bloco   = document.getElementById('es-bloco').value;
+  const topico  = document.getElementById('es-topico').value.trim();
+  const minutos = parseInt(document.getElementById('es-minutos').value) || 60;
+  sessoes.unshift({id:sessaoNextId++, materia, bloco, topico, minutos, data:getTodayKey(), hora:getNowLabel()});
   saveEstudo();
   document.getElementById('es-topico').value = '';
   document.getElementById('es-minutos').value = '';
-  document.getElementById('es-q-total').value = '';
-  document.getElementById('es-q-acertos').value = '';
-  document.getElementById('es-q-erros').value = '';
-  document.getElementById('es-aproveitamento').innerHTML = '';
   renderSessoes();
   renderProgresso();
 }
@@ -2952,32 +2877,14 @@ function deleteSessao(id) {
   renderProgresso();
 }
 
-function buildQuestaoBlock(s) {
-  if (!s.questoes) return '';
-  var pct   = Math.round(s.questoes.acertos / s.questoes.total * 100);
-  var color = pct >= 70 ? '#27ae60' : pct >= 50 ? '#e67e22' : '#e94560';
-  return '<div style="background:var(--bg);border-radius:6px;padding:7px 10px;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;align-items:center;margin-top:4px;">' +
-    '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;color:var(--text);">' + s.questoes.total + '</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;">total</div></div>' +
-    '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;color:#27ae60;">' + s.questoes.acertos + '</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;">acertos</div></div>' +
-    '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;color:#e94560;">' + s.questoes.erros + '</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;">erros</div></div>' +
-    '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;color:' + color + ';">' + pct + '%</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;">aproveit.</div></div>' +
-    '</div>';
-}
-
 function renderSessoes() {
   var el = document.getElementById('est-sessoes-list');
   if (!el) return;
 
-  var totalMin     = sessoes.reduce(function(a,s){return a+s.minutos;},0);
-  var sessoesComQ  = sessoes.filter(function(s){return s.questoes;});
-  var totalQ       = sessoesComQ.reduce(function(a,s){return a+s.questoes.total;},0);
-  var totalAcertos = sessoesComQ.reduce(function(a,s){return a+s.questoes.acertos;},0);
-  var totalErros   = sessoesComQ.reduce(function(a,s){return a+s.questoes.erros;},0);
-  var aprovGeral   = totalQ > 0 ? Math.round(totalAcertos/totalQ*100) : null;
-  var aprovColor   = aprovGeral===null ? 'var(--text)' : aprovGeral>=70?'#27ae60':aprovGeral>=50?'#e67e22':'#e94560';
-
+  var totalMin = sessoes.reduce(function(a,s){return a+s.minutos;},0);
   var totalH = Math.floor(totalMin/60);
   var totalM = totalMin%60 > 0 ? String(totalMin%60).padStart(2,'0')+'m' : '';
+  var hojeMin = sessoes.filter(function(s){return s.data===getTodayKey();}).reduce(function(a,s){return a+s.minutos;},0);
   document.getElementById('est-sessoes-summary').innerHTML =
     '<div class="fin-summary-grid" style="margin-bottom:16px;">' +
       '<div class="fin-card accent">' +
@@ -2985,20 +2892,10 @@ function renderSessoes() {
         '<div class="fin-card-val">' + totalH + 'h' + totalM + '</div>' +
         '<div class="fin-card-sub">' + sessoes.length + ' sessões</div>' +
       '</div>' +
-      '<div class="fin-card">' +
-        '<div class="fin-card-label">Questões</div>' +
-        '<div class="fin-card-val">' + totalQ + '</div>' +
-        '<div class="fin-card-sub">' + totalAcertos + ' acertos · ' + totalErros + ' erros</div>' +
-      '</div>' +
-      '<div class="fin-card" style="' + (aprovGeral!==null?'border-color:rgba(39,174,96,0.3);background:rgba(39,174,96,0.07);':'') + '">' +
-        '<div class="fin-card-label">Aproveitamento geral</div>' +
-        '<div class="fin-card-val" style="color:' + aprovColor + ';">' + (aprovGeral!==null?aprovGeral+'%':'—') + '</div>' +
-        '<div class="fin-card-sub">' + (aprovGeral!==null?(aprovGeral>=70?'✓ Bom':'⚠ Precisa melhorar'):'sem questões ainda') + '</div>' +
-      '</div>' +
-      '<div class="fin-card green">' +
-        '<div class="fin-card-label">Meta diária</div>' +
-        '<div class="fin-card-val">120min</div>' +
-        '<div class="fin-card-sub">2h/dia</div>' +
+      '<div class="fin-card ' + (hojeMin>=120?'green':'') + '">' +
+        '<div class="fin-card-label">Hoje</div>' +
+        '<div class="fin-card-val">' + hojeMin + 'min</div>' +
+        '<div class="fin-card-sub">' + (hojeMin>=120?'✓ meta atingida':'meta: 120min') + '</div>' +
       '</div>' +
     '</div>';
 
@@ -3036,7 +2933,6 @@ function renderSessoes() {
       html += '<div class="exp-val">' + s.minutos + 'min</div>';
       html += '<div class="exp-del" onclick="deleteSessao(' + s.id + ')">✕</div>';
       html += '</div></div>';
-      html += buildQuestaoBlock(s);
       html += '</div>';
     });
     html += '</div>';
