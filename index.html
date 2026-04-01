@@ -2730,6 +2730,20 @@ function renderProgresso() {
   const totalSessoes = sessoes.length;
   const hoje = getTodayKey();
   const hojeMinutos = sessoes.filter(s=>s.data===hoje).reduce((a,s)=>a+s.minutos,0);
+
+  // Média por dia — considera todos os dias desde o primeiro registro
+  const primeiroRegistro = sessoes.length > 0
+    ? sessoes.reduce((min,s) => s.data < min ? s.data : min, sessoes[0].data)
+    : null;
+  const diasDesdeInicio = primeiroRegistro
+    ? Math.max(1, Math.floor((new Date(getTodayKey()) - new Date(primeiroRegistro)) / (1000*60*60*24)) + 1)
+    : 1;
+  const mediaMinPorDia = totalMinutos / diasDesdeInicio;
+  const mediaH = Math.floor(mediaMinPorDia / 60);
+  const mediaM = Math.round(mediaMinPorDia % 60);
+  const mediaLabel = mediaH > 0
+    ? mediaH + 'h' + (mediaM > 0 ? String(mediaM).padStart(2,'0') + 'm' : '')
+    : Math.round(mediaMinPorDia) + 'min';
   const totalAll   = EDITAL.reduce((a,m)=>a+m.topicos.length,0);
   const doneAll    = EDITAL.reduce((a,m)=>a+m.topicos.filter(t=>estudoDone[t.id]).length,0);
   const lsTotalAll = LEI_SECA.reduce((a,l)=>a+l.topicos.length,0);
@@ -2753,6 +2767,11 @@ function renderProgresso() {
         <div class="fin-card-label">Total estudado</div>
         <div class="fin-card-val">${Math.floor(totalMinutos/60)}h${totalMinutos%60>0?String(totalMinutos%60).padStart(2,'0')+'m':''}</div>
         <div class="fin-card-sub">${totalSessoes} sessões</div>
+      </div>
+      <div class="fin-card ${mediaMinPorDia>=120?'green':mediaMinPorDia>=60?'':''}">
+        <div class="fin-card-label">Média por dia</div>
+        <div class="fin-card-val">${mediaLabel}</div>
+        <div class="fin-card-sub">${diasDesdeInicio}d desde o início</div>
       </div>
       <div class="fin-card green">
         <div class="fin-card-label">Tópicos concluídos</div>
