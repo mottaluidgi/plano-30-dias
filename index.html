@@ -32,6 +32,8 @@
     .catch(e => console.warn('setPersistence error:', e));
 
   let currentUID = null;
+  // DEV: coloque false quando quiser reativar login Google
+  const DEV_SKIP_LOGIN = true;
 
   window.fbSave = async function(key, data) {
     if (!currentUID) return;
@@ -92,6 +94,18 @@
     const checking = document.getElementById('login-checking');
     const loginBtn = document.getElementById('login-btn');
     if (checking) checking.style.display = 'none';
+
+    if (DEV_SKIP_LOGIN) {
+      currentUID = '__dev_local__';
+      window.currentUser = { name: 'Modo Teste', email: 'local@dev', photo: null };
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-screen').style.display = 'flex';
+      if (!authResolved) {
+        authResolved = true;
+        window.dispatchEvent(new Event('firebase-ready'));
+      }
+      return;
+    }
 
     if (user) {
       currentUID = user.uid;
@@ -388,6 +402,11 @@
   .exp-val { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; }
   .exp-del { font-size: 16px; color: var(--text3); cursor: pointer; padding: 4px; flex-shrink: 0; }
   .exp-del:active { color: #e94560; }
+  .exp-edit-btn { font-size: 11px; font-weight: 700; color: var(--text2); cursor: pointer; padding: 4px 8px; border: 0.5px solid var(--border2); border-radius: 999px; flex-shrink: 0; letter-spacing: 0.02em; text-transform: uppercase; }
+  .exp-edit-btn:active { color: var(--text); border-color: var(--text2); }
+  .exp-edit-form { background: var(--bg3); border-radius: var(--radius-sm); padding: 10px; margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .exp-edit-form input, .exp-edit-form select { font-size: 12px; padding: 6px 8px; }
+  .exp-edit-save { grid-column: 1/-1; padding: 8px; border-radius: var(--radius-sm); border: none; background: var(--text); color: #000; font-size: 12px; font-weight: 700; cursor: pointer; }
   /* TAREFAS DO DIA */
   .task-section { margin-top: 16px; }
   .task-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -409,6 +428,11 @@
   .task-cat { font-size: 10px; color: var(--text3); margin-top: 1px; }
   .task-del { font-size: 14px; color: var(--text3); padding: 4px; flex-shrink: 0; }
   .task-del:active { color: #e94560; }
+  .task-edit-btn { font-size: 11px; font-weight: 700; color: var(--text2); border: 0.5px solid var(--border2); border-radius: 999px; padding: 4px 8px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.02em; }
+  .task-edit-btn:active { color: var(--text); border-color: var(--text2); }
+  .task-edit-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px; margin: -2px 0 8px; }
+  .task-edit-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .task-cancel-btn { width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 0.5px solid var(--border2); background: transparent; color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; }
   .task-save-btn { width: 100%; padding: 9px; border-radius: var(--radius-sm); border: none; background: var(--text); color: #000; font-size: 13px; font-weight: 600; cursor: pointer; }
   .task-notif-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: var(--text2); }
   .task-notif-toggle { position: relative; width: 38px; height: 22px; }
@@ -1028,6 +1052,12 @@ const DAYS = [
   }
 ];
 
+// Se true, esconde/remove as tarefas fixas do checklist "Hoje"
+const REMOVE_FIXED_CHECKLIST = true;
+if (REMOVE_FIXED_CHECKLIST) {
+  DAYS.forEach(d => { d.items = []; });
+}
+
 const TAG_MAP = {
   horm:{label:'💉 Hormonal',cls:'tag-horm'},
   corr:{label:'🏃 Corrida',cls:'tag-corr'},
@@ -1100,7 +1130,11 @@ function save() {
 
 function key(d,i){ return d+'_'+i; }
 function dayDone(di){ return DAYS[di].items.filter((_,ii)=>done[key(di,ii)]).length; }
-function totalDone(){ return Object.values(done).filter(Boolean).length; }
+function totalDone(){
+  let count = 0;
+  DAYS.forEach((d,di) => d.items.forEach((_,ii) => { if (done[key(di,ii)]) count++; }));
+  return count;
+}
 function totalItems(){ return DAYS.reduce((a,d)=>a+d.items.length,0); }
 
 function renderNav() {
@@ -1118,10 +1152,11 @@ function renderNav() {
         const dd = dayDone(i), tot = d.items.length;
         const dots = d.tags.map(t=>`<div class="dot" style="background:${DOT_COLORS[t]};"></div>`).join('');
         const isToday = i === todayIdx;
+        const countLabel = tot === 0 ? '—' : `${dd}/${tot}`;
         return `<button class="day-btn${i===currentDay?' active':''}" onclick="selectDay(${i})" style="${isToday && i!==currentDay ? 'border-color:var(--text2);' : ''}">
           <span class="d-label">${d.short}</span>
           <span style="font-size:10px;color:${i===currentDay?'rgba(0,0,0,0.5)':'var(--text3)'};">${weekDates[i]}</span>
-          <span class="d-count">${dd}/${tot}</span>
+          <span class="d-count">${countLabel}</span>
           <div class="dot-row">${dots}</div>
         </button>`;
       }).join('')}
@@ -1132,7 +1167,7 @@ function renderNav() {
 function renderDay() {
   const d = DAYS[currentDay];
   const dd = dayDone(currentDay), tot = d.items.length;
-  const pct = Math.round(dd/tot*100);
+  const pct = tot > 0 ? Math.round(dd/tot*100) : 0;
 
   const tags = d.tags.map(t=>`<span class="tag ${TAG_MAP[t].cls}">${TAG_MAP[t].label}</span>`).join('');
 
@@ -1154,7 +1189,7 @@ function renderDay() {
   }).join('');
 
   const t2 = totalItems(), d2 = totalDone();
-  const pct2 = Math.round(d2/t2*100);
+  const pct2 = t2 > 0 ? Math.round(d2/t2*100) : 0;
   document.getElementById('overall-badge').textContent = pct2+'% feito';
 
   const dayTasksHtml = renderTasksForDay(currentDay);
@@ -1172,7 +1207,7 @@ function renderDay() {
       </div>
       <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
     </div>
-    ${items}
+    ${tot === 0 ? `<div style="text-align:center;padding:14px;color:var(--text3);font-size:13px;">Checklist fixo removido. Use "Tarefas do dia" abaixo.</div>` : items}
     ${dayTasksHtml}
   `;
 }
@@ -1211,6 +1246,7 @@ const TASK_CATS = {
 
 let tasksData = {};
 let taskNextId = 1;
+let editingTaskByDay = {};
 try {
   const s = JSON.parse(localStorage.getItem('plano30_tasks') || 'null');
   if (s) { tasksData = s.tasks; taskNextId = s.nextId||1; }
@@ -1236,7 +1272,41 @@ function toggleTask(dayIdx, id) {
 function deleteTask(dayIdx, id) {
   if (!tasksData[dayIdx]) return;
   tasksData[dayIdx] = tasksData[dayIdx].filter(t=>t.id!==id);
+  if (editingTaskByDay[dayIdx] === id) delete editingTaskByDay[dayIdx];
   saveTasks();
+  renderDay();
+}
+
+function startEditTask(dayIdx, id) {
+  editingTaskByDay[dayIdx] = id;
+  renderDay();
+}
+
+function cancelEditTask(dayIdx) {
+  delete editingTaskByDay[dayIdx];
+  renderDay();
+}
+
+function saveEditedTask(dayIdx, id) {
+  if (!tasksData[dayIdx]) return;
+  const t = tasksData[dayIdx].find(x => x.id === id);
+  if (!t) return;
+  const descEl = document.getElementById('task-edit-desc-' + id);
+  const horaEl = document.getElementById('task-edit-hora-' + id);
+  const catEl = document.getElementById('task-edit-cat-' + id);
+  const notifyEl = document.getElementById('task-edit-notify-' + id);
+  const desc = (descEl?.value || '').trim();
+  const hora = horaEl?.value || '';
+  const cat = catEl?.value || t.cat;
+  const notify = !!(notifyEl && notifyEl.checked && hora);
+  if (!desc) return;
+  t.desc = desc;
+  t.hora = hora;
+  t.cat = cat;
+  t.notify = notify;
+  saveTasks();
+  if (notify) scheduleNotification(t, dayIdx);
+  delete editingTaskByDay[dayIdx];
   renderDay();
 }
 
@@ -1349,6 +1419,7 @@ function renderTasksForDay(dayIdx) {
 
   const taskItems = tasks.map(t => {
     const tc = TASK_CATS[t.cat] || TASK_CATS.outros;
+    const isEditing = editingTaskByDay[dayIdx] === t.id;
     return `<div class="task-item${t.done?' done-task':''}" onclick="toggleTask(${dayIdx},${t.id})">
       <div class="task-check">
         ${t.done?`<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5L4 7.5L8.5 2.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`:''}
@@ -1358,8 +1429,35 @@ function renderTasksForDay(dayIdx) {
         <div class="task-text">${t.desc}</div>
         <div class="task-cat" style="color:${tc.color};">${tc.label}</div>
       </div>
+      <div class="task-edit-btn" onclick="event.stopPropagation();startEditTask(${dayIdx},${t.id})">Editar</div>
       <div class="task-del" onclick="event.stopPropagation();deleteTask(${dayIdx},${t.id})">✕</div>
-    </div>`;
+    </div>
+    ${isEditing ? `
+    <div class="task-edit-card">
+      <input id="task-edit-desc-${t.id}" class="ci-input" type="text" value="${(t.desc||'').replace(/"/g,'&quot;')}" style="width:100%;text-align:left;font-size:13px;margin-bottom:8px;">
+      <div class="task-row-inputs" style="margin-bottom:0;">
+        <input id="task-edit-hora-${t.id}" class="ci-input" type="time" value="${t.hora||''}" style="width:100%;">
+        <select id="task-edit-cat-${t.id}" class="ci-input" style="width:100%;text-align:left;">
+          <option value="pessoal" ${t.cat==='pessoal'?'selected':''}>Pessoal</option>
+          <option value="saude" ${t.cat==='saude'?'selected':''}>Saúde</option>
+          <option value="treino" ${t.cat==='treino'?'selected':''}>Treino</option>
+          <option value="estudo" ${t.cat==='estudo'?'selected':''}>Estudo</option>
+          <option value="trabalho" ${t.cat==='trabalho'?'selected':''}>Trabalho</option>
+          <option value="outros" ${t.cat==='outros'?'selected':''}>Outros</option>
+        </select>
+      </div>
+      <div class="task-notif-row" style="margin-top:8px;margin-bottom:0;">
+        <span>🔔 Avisar 30 min antes</span>
+        <label class="task-notif-toggle">
+          <input type="checkbox" id="task-edit-notify-${t.id}" ${t.notify?'checked':''}>
+          <span class="task-notif-slider"></span>
+        </label>
+      </div>
+      <div class="task-edit-actions">
+        <button class="task-cancel-btn" onclick="cancelEditTask(${dayIdx})">Cancelar</button>
+        <button class="task-save-btn" style="padding:8px;" onclick="saveEditedTask(${dayIdx},${t.id})">Salvar edição</button>
+      </div>
+    </div>` : ''}`;
   }).join('');
 
   return `
@@ -1719,6 +1817,23 @@ function fmtBRL(v) {
   return 'R$' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
+function getExpenseDateLabel(e) {
+  if (e.date) {
+    const p = e.date.split('-');
+    if (p.length === 3) return p[2] + '/' + p[1];
+  }
+  return String(e.day || 1).padStart(2, '0');
+}
+
+function getExpenseDateInputValue(e) {
+  if (e.date) return e.date;
+  const now = getBrasiliaDate();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(Math.min(31, Math.max(1, e.day || 1))).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function addExpense() {
   const desc = document.getElementById('fin-new-desc').value.trim();
   const val  = parseFloat(document.getElementById('fin-new-val').value) || 0;
@@ -1735,6 +1850,37 @@ function addExpense() {
 
 function deleteExpense(id) {
   finData = finData.filter(e => e.id !== id);
+  saveFin();
+  renderFin();
+}
+
+function toggleEditExpense(id) {
+  const el = document.getElementById('edit-form-' + id);
+  if (!el) return;
+  const isOpen = el.style.display !== 'none';
+  // Close all open forms first
+  document.querySelectorAll('[id^="edit-form-"]').forEach(f => f.style.display = 'none');
+  document.querySelectorAll('[id^="edit-btn-"]').forEach(b => { b.textContent = 'Editar'; b.style.color = 'var(--text2)'; });
+  if (!isOpen) {
+    el.style.display = 'grid';
+    const btn = document.getElementById('edit-btn-' + id);
+    if (btn) { btn.textContent = 'Fechar'; btn.style.color = '#e94560'; }
+  }
+}
+
+function saveEditExpense(id) {
+  const e = finData.find(e => e.id === id);
+  if (!e) return;
+  const desc = document.getElementById('edit-desc-' + id).value.trim();
+  const val  = parseFloat(document.getElementById('edit-val-' + id).value) || 0;
+  const cat  = document.getElementById('edit-cat-' + id).value;
+  const date = document.getElementById('edit-date-' + id).value;
+  const dayFromDate = date ? parseInt(date.split('-')[2], 10) : NaN;
+  const dayInput = parseInt(document.getElementById('edit-day-' + id).value, 10);
+  const day  = dayFromDate || dayInput || e.day;
+  if (!desc || !val) return;
+  e.desc = desc; e.val = val; e.cat = cat; e.day = day;
+  if (date) e.date = date;
   saveFin();
   renderFin();
 }
@@ -1800,7 +1946,7 @@ function renderFin() {
     <div class="horm-section-title">Vencendo em breve</div>
     ${upcoming.sort((a,b)=>a.day-b.day).map(e=>`
       <div class="exp-item" style="border-color:rgba(233,69,96,0.3);">
-        <div class="exp-day" style="color:#e94560;">${e.day}</div>
+        <div class="exp-day" style="color:#e94560;">${getExpenseDateLabel(e)}</div>
         <div class="exp-info">
           <div class="exp-desc">${e.desc}</div>
           <div class="exp-cat">${CAT_LABELS[e.cat]||e.cat}</div>
@@ -1825,15 +1971,28 @@ function renderFin() {
   document.getElementById('fin-list').innerHTML = `
     <div class="horm-section-title">Todos os gastos</div>
     ${sorted.map(e => `
-    <div class="exp-item">
-      <div class="exp-day">dia<br>${e.day}</div>
-      <div class="exp-info">
-        <div class="exp-desc">${e.desc}</div>
-        <div class="exp-cat">${CAT_LABELS[e.cat]||e.cat}</div>
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;overflow:hidden;">
+      <div class="exp-item" style="margin-bottom:0;background:transparent;border:none;border-radius:0;">
+        <div class="exp-day">venc.<br>${getExpenseDateLabel(e)}</div>
+        <div class="exp-info">
+          <div class="exp-desc">${e.desc}</div>
+          <div class="exp-cat">${CAT_LABELS[e.cat]||e.cat}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div class="exp-val">${fmtBRL(e.val)}</div>
+          <div id="edit-btn-${e.id}" class="exp-edit-btn" onclick="toggleEditExpense(${e.id})">Editar</div>
+          <div class="exp-del" onclick="deleteExpense(${e.id})">✕</div>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div class="exp-val">${fmtBRL(e.val)}</div>
-        <div class="exp-del" onclick="deleteExpense(${e.id})">✕</div>
+      <div id="edit-form-${e.id}" class="exp-edit-form" style="display:none;">
+        <input id="edit-desc-${e.id}" class="ci-input" type="text" value="${e.desc.replace(/"/g,'&quot;')}" placeholder="Descrição" style="width:100%;text-align:left;font-size:12px;">
+        <input id="edit-val-${e.id}" class="ci-input" type="number" value="${e.val}" step="0.01" style="width:100%;">
+        <select id="edit-cat-${e.id}" class="ci-input" style="width:100%;text-align:left;font-size:12px;">
+          ${Object.entries(CAT_LABELS).map(([k,v]) => `<option value="${k}"${e.cat===k?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <input id="edit-date-${e.id}" class="ci-input" type="date" value="${getExpenseDateInputValue(e)}" style="width:100%;">
+        <input id="edit-day-${e.id}" class="ci-input" type="number" value="${e.day}" min="1" max="31" placeholder="Dia venc." style="width:100%;">
+        <button class="exp-edit-save" onclick="saveEditExpense(${e.id})">✓ Salvar alteração</button>
       </div>
     </div>`).join('')}
   `;
@@ -1981,7 +2140,7 @@ function renderDashboard() {
   // Checklist
   const checkTotal = d.items.length;
   const checkDone  = d.items.filter((_,ii) => done[key(todayIdx,ii)]).length;
-  const checkPct   = Math.round(checkDone / checkTotal * 100);
+  const checkPct   = checkTotal > 0 ? Math.round(checkDone / checkTotal * 100) : 0;
 
   // Água
   const aguaHoje = aguaData[hoje] || 0;
@@ -2081,7 +2240,7 @@ function renderDashboard() {
       '</div>' +
       '<div class="dash-hero-info">' +
         '<div class="dash-greeting">' + greeting + ', Luidgi</div>' +
-        '<div class="dash-date">' + dateStr + ' · ' + checkDone + '/' + checkTotal + ' itens</div>' +
+        '<div class="dash-date">' + dateStr + ' · ' + (checkTotal > 0 ? (checkDone + '/' + checkTotal + ' itens') : 'sem checklist fixo') + '</div>' +
         '<div class="dash-pills">' + pills + '</div>' +
       '</div>' +
     '</div>' +
@@ -2367,14 +2526,51 @@ const DAILY_CAT_COLORS = {
 
 let dailyData = {};
 let dailyNextId = 1;
+let dailyCustomCats = []; // [{id:'petshop', label:'Pet Shop'}]
 try {
   const saved = JSON.parse(localStorage.getItem('plano30_daily') || 'null');
-  if (saved) { dailyData = saved.entries; dailyNextId = saved.nextId || 1; }
+  if (saved) {
+    dailyData = saved.entries;
+    dailyNextId = saved.nextId || 1;
+    dailyCustomCats = Array.isArray(saved.customCats) ? saved.customCats : [];
+  }
 } catch(e) {}
 
 function saveDailyFin() {
-  try { localStorage.setItem('plano30_daily', JSON.stringify({entries: dailyData, nextId: dailyNextId})); } catch(e) {}
-  if(window.fbSave) window.fbSave('daily', {entries:dailyData, nextId:dailyNextId});
+  const payload = {entries: dailyData, nextId: dailyNextId, customCats: dailyCustomCats};
+  try { localStorage.setItem('plano30_daily', JSON.stringify(payload)); } catch(e) {}
+  if(window.fbSave) window.fbSave('daily', payload);
+}
+
+function normalizeCatId(str) {
+  return str
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function getDailyCatColor(catId) {
+  if (DAILY_CAT_COLORS[catId]) return DAILY_CAT_COLORS[catId];
+  const customIndex = dailyCustomCats.findIndex(c => c.id === catId);
+  if (customIndex < 0) return '#7f8c8d';
+  const palette = ['#1abc9c','#3498db','#9b59b6','#f39c12','#e74c3c','#2ecc71','#95a5a6','#d35400'];
+  return palette[customIndex % palette.length];
+}
+
+function getDailyCatLabel(catId) {
+  return DAILY_CAT_LABELS[catId] || (dailyCustomCats.find(c => c.id === catId)?.label) || catId;
+}
+
+function renderDailyCategoryOptions(selectedValue) {
+  const sel = document.getElementById('fd-cat');
+  if (!sel) return;
+  const baseCats = Object.keys(DAILY_CAT_LABELS).map(id => ({id, label: DAILY_CAT_LABELS[id]}));
+  const allCats = [...baseCats, ...dailyCustomCats];
+  sel.innerHTML = allCats.map(c =>
+    `<option value="${c.id}">${c.label}</option>`
+  ).join('') + `<option value="__new__">+ Nova área...</option>`;
+  sel.value = selectedValue && allCats.some(c => c.id === selectedValue) ? selectedValue : 'alimentacao';
 }
 
 function getBrasiliaDate() {
@@ -2400,9 +2596,23 @@ function getDayLabel(key) {
 function addDailyExpense() {
   const desc = document.getElementById('fd-desc').value.trim();
   const val  = parseFloat(document.getElementById('fd-val').value) || 0;
-  const cat  = document.getElementById('fd-cat').value;
+  let cat  = document.getElementById('fd-cat').value;
   const note = document.getElementById('fd-note').value.trim();
   if (!desc || !val) return;
+
+  if (cat === '__new__') {
+    const label = prompt('Nome da nova área (ex: Pet, Farmácia, Investimentos):');
+    if (!label || !label.trim()) return;
+    const cleanLabel = label.trim();
+    let id = normalizeCatId(cleanLabel);
+    if (!id) id = 'area_' + Date.now();
+    if (!DAILY_CAT_LABELS[id] && !dailyCustomCats.some(c => c.id === id)) {
+      dailyCustomCats.push({id, label: cleanLabel});
+    }
+    cat = id;
+    renderDailyCategoryOptions(cat);
+  }
+
   const key = getTodayKey();
   if (!dailyData[key]) dailyData[key] = [];
   dailyData[key].push({id: dailyNextId++, desc, val, cat, note, hora: getNowLabel()});
@@ -2410,6 +2620,7 @@ function addDailyExpense() {
   document.getElementById('fd-desc').value = '';
   document.getElementById('fd-val').value = '';
   document.getElementById('fd-note').value = '';
+  renderDailyCategoryOptions(cat);
   renderDailyFin();
 }
 
@@ -2429,6 +2640,66 @@ function getMonthFromKey(dateKey) {
 function getMonthNameFromKey(monthKey) {
   const [y,m] = monthKey.split('-');
   return MONTHS_NAMES[parseInt(m)-1] + ' ' + y;
+}
+
+function renderDailyLineChart(currentMonthDays, currentMonthKey) {
+  const chartEl = document.getElementById('fin-daily-chart');
+  if (!chartEl) return;
+
+  const [y, m] = currentMonthKey.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const monthPrefix = `${y}-${String(m).padStart(2, '0')}-`;
+  const totals = Array.from({length: daysInMonth}, (_, i) => {
+    const k = monthPrefix + String(i + 1).padStart(2, '0');
+    const entries = currentMonthDays[k] || [];
+    return entries.reduce((a, e) => a + e.val, 0);
+  });
+
+  const hasAny = totals.some(v => v > 0);
+  if (!hasAny) {
+    chartEl.innerHTML = '<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">' +
+      '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Evolução diária (mês atual)</div>' +
+      '<div style="font-size:12px;color:var(--text3);">Sem lançamentos neste mês ainda.</div>' +
+    '</div>';
+    return;
+  }
+
+  const W = 340, H = 96, PAD = 10;
+  const maxVal = Math.max(...totals, 1);
+  const xStep = daysInMonth > 1 ? (W - PAD * 2) / (daysInMonth - 1) : 0;
+  const points = totals.map((v, i) => {
+    const x = PAD + i * xStep;
+    const yPos = H - PAD - (v / maxVal) * (H - PAD * 2);
+    return `${x.toFixed(1)},${yPos.toFixed(1)}`;
+  }).join(' ');
+
+  const firstX = PAD;
+  const lastX = PAD + (daysInMonth - 1) * xStep;
+  const areaPath = `M${firstX},${H} L${points.split(' ').join(' L')} L${lastX.toFixed(1)},${H} Z`;
+
+  const lastIdx = totals.map((v, i) => ({v, i})).filter(x => x.v > 0).pop()?.i ?? (daysInMonth - 1);
+  const lastXPoint = PAD + lastIdx * xStep;
+  const lastYPoint = H - PAD - (totals[lastIdx] / maxVal) * (H - PAD * 2);
+
+  chartEl.innerHTML = '<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">' +
+    '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Evolução diária (mês atual)</div>' +
+    `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="dailyLineGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#e94560" stop-opacity="0.35"></stop>
+          <stop offset="100%" stop-color="#e94560" stop-opacity="0"></stop>
+        </linearGradient>
+      </defs>
+      <path d="${areaPath}" fill="url(#dailyLineGrad)"></path>
+      <polyline points="${points}" fill="none" stroke="#e94560" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+      <circle cx="${lastXPoint.toFixed(1)}" cy="${lastYPoint.toFixed(1)}" r="3.5" fill="#e94560"></circle>
+    </svg>` +
+    `<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--text3);">
+      <span>dia 1</span>
+      <span>pico: ${fmtBRL(maxVal)}</span>
+      <span>dia ${daysInMonth}</span>
+    </div>` +
+  '</div>';
 }
 
 function renderDailyFin() {
@@ -2476,7 +2747,10 @@ function renderDailyFin() {
         <div class="fin-card-val">${fmtBRL(currentDaysTracked ? currentMonthTotal/currentDaysTracked : 0)}</div>
         <div class="fin-card-sub">mês atual</div>
       </div>
-    </div>`;
+    </div>
+    <div id="fin-daily-chart"></div>`;
+
+  renderDailyLineChart(currentMonthDays, currentMonthKey);
 
   if (Object.keys(dailyData).length === 0) {
     document.getElementById('fin-daily-list').innerHTML = `
@@ -2499,7 +2773,7 @@ function renderDailyFin() {
       catTotals[e.cat] = (catTotals[e.cat]||0) + e.val;
     }));
     const topCats = Object.entries(catTotals).sort((a,b)=>b[1]-a[1]).slice(0,3)
-      .map(([cat,amt]) => `<span style="font-size:10px;color:var(--text3);">${DAILY_CAT_LABELS[cat]||cat} ${fmtBRL(amt)}</span>`).join(' · ');
+      .map(([cat,amt]) => `<span style="font-size:10px;color:var(--text3);">${getDailyCatLabel(cat)} ${fmtBRL(amt)}</span>`).join(' · ');
 
     // Days detail
     const daysSorted = Object.keys(monthDays).sort().reverse();
@@ -2509,10 +2783,10 @@ function renderDailyFin() {
       const isToday = dateKey === todayKey;
       const rows = entries.map(e => `
         <div class="exp-item">
-          <div style="width:9px;height:9px;border-radius:50%;background:${DAILY_CAT_COLORS[e.cat]||'#888'};flex-shrink:0;"></div>
+          <div style="width:9px;height:9px;border-radius:50%;background:${getDailyCatColor(e.cat)};flex-shrink:0;"></div>
           <div class="exp-info">
             <div class="exp-desc">${e.desc}${e.note?` <span style="color:var(--text3);font-size:11px;">· ${e.note}</span>`:''}</div>
-            <div class="exp-cat">${DAILY_CAT_LABELS[e.cat]||e.cat}${e.hora ? ` · <span style="color:var(--text3);">${e.hora}</span>` : ''}</div>
+            <div class="exp-cat">${getDailyCatLabel(e.cat)}${e.hora ? ` · <span style="color:var(--text3);">${e.hora}</span>` : ''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <div class="exp-val">${fmtBRL(e.val)}</div>
@@ -2574,6 +2848,7 @@ function switchFinTab(tab) {
   }
 }
 
+renderDailyCategoryOptions();
 renderDailyFin();
 
 /* ── ESTUDO PCPR ────────────────────────────────────────── */
@@ -3379,7 +3654,9 @@ window.addEventListener('firebase-ready', async () => {
   if (fbDaily) {
     dailyData = fbDaily.entries || {};
     dailyNextId = fbDaily.nextId || 1;
+    dailyCustomCats = Array.isArray(fbDaily.customCats) ? fbDaily.customCats : [];
     try { localStorage.setItem('plano30_daily', JSON.stringify(fbDaily)); } catch(e){}
+    renderDailyCategoryOptions();
     renderDailyFin();
   }
   if (fbEstudo) {
@@ -3419,6 +3696,7 @@ window.addEventListener('firebase-ready', async () => {
   renderDay();
   renderUserBadge();
   renderFin();
+  renderDailyCategoryOptions();
   renderDailyFin();
   renderEdital();
   renderLeiseca();
