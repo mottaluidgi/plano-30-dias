@@ -26,11 +26,6 @@
   const db   = getFirestore(firebaseApp);
   const auth = getAuth(firebaseApp);
 
-  // indexedDB é mais robusto que localStorage em PWA/Safari — persiste mesmo fechando o app
-  setPersistence(auth, indexedDBLocalPersistence)
-    .catch(() => setPersistence(auth, browserLocalPersistence))
-    .catch(e => console.warn('setPersistence error:', e));
-
   let currentUID = null;
 
   window.fbSave = async function(key, data) {
@@ -62,22 +57,6 @@
     }
   };
 
-  // Handle redirect result (runs when returning from Google login page)
-  getRedirectResult(auth).then((result) => {
-    if (result && result.user) {
-      console.log('Login via redirect OK:', result.user.displayName);
-      // onAuthStateChanged vai disparar automaticamente
-    }
-  }).catch((e) => {
-    console.warn('getRedirectResult error:', e.code, e.message);
-    // Mostra erro na tela de login
-    const btn = document.getElementById('login-btn');
-    if (btn) {
-      btn.textContent = 'Tentar novamente';
-      btn.disabled = false;
-    }
-  });
-
   window.fbSignOut = async function() {
     await signOut(auth);
     currentUID = null;
@@ -85,32 +64,54 @@
     document.getElementById('app-screen').style.display = 'none';
   };
 
-  // Watch auth state — fires on login, logout and page load if already logged in
-  let authResolved = false;
-  onAuthStateChanged(auth, (user) => {
-    // Hide the "verificando sessão" indicator
-    const checking = document.getElementById('login-checking');
-    const loginBtn = document.getElementById('login-btn');
-    if (checking) checking.style.display = 'none';
-
-    if (user) {
-      currentUID = user.uid;
-      window.currentUser = { name: user.displayName, email: user.email, photo: user.photoURL };
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app-screen').style.display  = 'flex';
-      if (!authResolved) {
-        authResolved = true;
-        window.dispatchEvent(new Event('firebase-ready'));
-      }
-    } else {
-      currentUID = null;
-      authResolved = true;
-      // Show login button only after Firebase confirmed no session
-      if (loginBtn) loginBtn.style.display = 'flex';
-      document.getElementById('login-screen').style.display = 'flex';
-      document.getElementById('app-screen').style.display  = 'none';
+  // Inicializa tudo após configurar persistência
+  async function initAuth() {
+    // Configura persistência primeiro — AWAIT garante que está pronto antes de continuar
+    try {
+      await setPersistence(auth, indexedDBLocalPersistence);
+    } catch(e) {
+      try { await setPersistence(auth, browserLocalPersistence); } catch(e2) {}
     }
-  });
+
+    // Processa resultado do redirect (se voltou do Google)
+    try {
+      const result = await getRedirectResult(auth);
+      if (result && result.user) {
+        console.log('[OBSTINATE] Login redirect OK:', result.user.displayName);
+      }
+    } catch(e) {
+      console.warn('[OBSTINATE] getRedirectResult error:', e.code, e.message);
+      const btn = document.getElementById('login-btn');
+      if (btn) { btn.textContent = 'Tentar novamente'; btn.disabled = false; btn.style.display = 'flex'; }
+    }
+
+    // Observa estado de autenticação
+    let authResolved = false;
+    onAuthStateChanged(auth, (user) => {
+      const checking = document.getElementById('login-checking');
+      const loginBtn = document.getElementById('login-btn');
+      if (checking) checking.style.display = 'none';
+
+      if (user) {
+        currentUID = user.uid;
+        window.currentUser = { name: user.displayName, email: user.email, photo: user.photoURL };
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-screen').style.display  = 'flex';
+        if (!authResolved) {
+          authResolved = true;
+          window.dispatchEvent(new Event('firebase-ready'));
+        }
+      } else {
+        currentUID = null;
+        authResolved = true;
+        if (loginBtn) loginBtn.style.display = 'flex';
+        document.getElementById('login-screen').style.display = 'flex';
+        document.getElementById('app-screen').style.display  = 'none';
+      }
+    });
+  }
+
+  initAuth();
 </script>
 <title>OBSTINATE</title>
 <style>
@@ -591,6 +592,7 @@
       <h1>OBSTINATE</h1>
       <div style="display:flex;align-items:center;gap:8px;">
         <button id="dash-toggle-btn" onclick="toggleDashboard()" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;border:0.5px solid var(--border2);background:var(--bg2);color:var(--text2);cursor:pointer;">📊 Resumo</button>
+        <button id="backup-btn" onclick="forceBackupNow()" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;border:0.5px solid var(--border2);background:var(--bg2);color:var(--text2);cursor:pointer;">☁ Forçar backup</button>
         <span class="overall-badge" id="overall-badge">0% feito</span>
         <div id="user-badge-wrap"></div>
       </div>
@@ -2949,34 +2951,66 @@ function buildStudyChart(matStats) {
   var container = document.getElementById('study-chart-container');
   if (!container) return;
 
-  var maxMins = 1;
-  matStats.forEach(function(m) { if (m.mins > maxMins) maxMins = m.mins; });
+  // Filter only matérias with time studied
+  var active = matStats.filter(function(m) { return m.mins > 0; });
+  if (active.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px;">Nenhuma sessão registrada ainda</div>';
+    return;
+  }
 
-  var chartH = 100, barW = 28, gap = 8;
-  var totalW = matStats.length * (barW + gap) - gap;
+  var maxMins = 1;
+  active.forEach(function(m) { if (m.mins > maxMins) maxMins = m.mins; });
+
+  // Responsive: fit bars to container width
+  var containerW = container.clientWidth || 320;
+  var PAD = 10;
+  var availW = containerW - PAD * 2;
+  var chartH = 110;
+  var labelH = 32; // space for label below bar
+  var topPad = 22; // space for time label above bar
+
+  // Calculate bar width based on available space
+  var barW = Math.min(36, Math.max(18, Math.floor(availW / active.length) - 6));
+  var gap = Math.max(4, Math.floor((availW - barW * active.length) / Math.max(1, active.length - 1)));
+  var totalW = barW * active.length + gap * (active.length - 1);
+  // Center if smaller than container
+  var startX = Math.max(0, (availW - totalW) / 2);
 
   var bars = '';
-  matStats.forEach(function(m, i) {
+  active.forEach(function(m, i) {
     var mins = m.mins;
-    var barH = Math.max(mins > 0 ? 2 : 0, Math.round((mins / maxMins) * chartH));
-    var x = i * (barW + gap);
+    var barH = Math.max(4, Math.round((mins / maxMins) * chartH));
+    var x = startX + i * (barW + gap);
     var y = chartH - barH;
+
+    // Time label above bar
     var hLabel = mins >= 60
       ? Math.floor(mins/60) + 'h' + (mins%60 > 0 ? String(mins%60).padStart(2,'0') + 'm' : '')
-      : (mins > 0 ? mins + 'm' : '');
-    var shortLabel = m.mat.label.split(/[\s\/]/).pop().substring(0, 4);
+      : mins + 'min';
 
-    bars += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" rx="3" fill="' + m.mat.color + '" opacity="0.85"/>';
-    if (mins > 0) {
-      bars += '<text x="' + (x + barW/2) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="8" fill="' + m.mat.color + '" font-weight="600">' + hLabel + '</text>';
-    }
-    bars += '<text x="' + (x + barW/2) + '" y="' + (chartH + 14) + '" text-anchor="middle" font-size="8" fill="#666">' + shortLabel + '</text>';
+    // Short label below — abbreviate smartly
+    var words = m.mat.label.split(' ');
+    var shortLabel = words.length > 1 ? words[words.length-1].substring(0,5) : m.mat.label.substring(0,5);
+
+    // Bar
+    bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW + '" height="' + barH.toFixed(1) + '" rx="4" fill="' + m.mat.color + '" opacity="0.9"/>';
+
+    // Time label above bar — always visible
+    bars += '<text x="' + (x + barW/2).toFixed(1) + '" y="' + (y - 5).toFixed(1) + '" text-anchor="middle" font-size="9" fill="' + m.mat.color + '" font-weight="700">' + hLabel + '</text>';
+
+    // Matéria label below
+    bars += '<text x="' + (x + barW/2).toFixed(1) + '" y="' + (chartH + 13).toFixed(1) + '" text-anchor="middle" font-size="8.5" fill="#888">' + shortLabel + '</text>';
   });
 
+  var svgW = availW + PAD * 2;
+  var svgH = chartH + labelH + topPad;
+
   container.innerHTML =
-    '<svg width="100%" viewBox="0 -16 ' + totalW + ' ' + (chartH + 28) + '" preserveAspectRatio="xMidYMid meet">' +
-      '<line x1="0" y1="' + chartH + '" x2="' + totalW + '" y2="' + chartH + '" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>' +
-      bars +
+    '<svg width="100%" viewBox="0 0 ' + svgW + ' ' + svgH + '" style="overflow:visible;">' +
+      '<g transform="translate(' + PAD + ',' + topPad + ')">' +
+        '<line x1="0" y1="' + chartH + '" x2="' + availW + '" y2="' + chartH + '" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>' +
+        bars +
+      '</g>' +
     '</svg>';
 }
 
@@ -3354,6 +3388,16 @@ function renderUserBadge() {
 }
 
 // Sobe TODOS os dados locais pro Firebase
+async function forceBackupNow() {
+  if (!window.fbSave) { alert('Firebase não conectado. Faça login primeiro.'); return; }
+  const btn = document.getElementById('backup-btn');
+  if (btn) { btn.textContent = '⏳ Salvando...'; btn.disabled = true; }
+  showSync('☁ Fazendo backup completo...');
+  await uploadLocalToFirebase();
+  if (btn) { btn.textContent = '☁ Backup feito!'; btn.style.color = '#27ae60'; setTimeout(()=>{ btn.textContent = '☁ Forçar backup'; btn.style.color=''; btn.disabled=false; }, 3000); }
+  showSync('✓ Backup completo!');
+}
+
 async function uploadLocalToFirebase() {
   const localMap = {
     done:    () => done,
